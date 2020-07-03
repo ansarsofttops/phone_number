@@ -4,7 +4,7 @@ class Phone < ApplicationRecord
   PHONE_RANGE_END = 9999999999
 
   validates_inclusion_of :phone, :in => PHONE_RANGE_START..PHONE_RANGE_END
-  before_create :validate_and_assign_phone_number
+  validate :validate_and_assign_phone_number
 
 
   def self.get_all_numbers
@@ -12,7 +12,7 @@ class Phone < ApplicationRecord
   end
 
   def get_next_available_number
-    return PHONE_RANGE_START if Phone.count == 0
+    return PHONE_RANGE_START if Phone.count == 0 || Phone.where(phone: PHONE_RANGE_START).blank?
 
     number = Phone.order('phone ASC').first.phone + 1
     while number < PHONE_RANGE_END
@@ -28,14 +28,14 @@ class Phone < ApplicationRecord
   private
 
   def validate_and_assign_phone_number
-    if !self.valid? || Phone.get_all_numbers.include?(phone)
-      number = self.get_next_available_number
-      if number > PHONE_RANGE_END || number < PHONE_RANGE_START
-        errors.add(:phone, 'No new number availabe')
-      else
-        self.phone = number
-      end
-    else
+
+    return true if Phone.where(phone: self.phone).blank?
+
+    if self.phone.to_i > PHONE_RANGE_END || self.phone.to_i < PHONE_RANGE_START || Phone.get_all_numbers.include?(phone)
+      self.phone = self.get_next_available_number
+    end
+
+    if self.phone.to_i > PHONE_RANGE_END || self.phone.to_i < PHONE_RANGE_START
       errors.add(:phone, 'No new number availabe')
     end
   end
