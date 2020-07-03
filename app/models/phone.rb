@@ -1,45 +1,61 @@
 class Phone < ApplicationRecord
-
-  PHONE_RANGE_START = 1111111111
-  PHONE_RANGE_END = 9999999999
-
-  validates_inclusion_of :phone, :in => PHONE_RANGE_START..PHONE_RANGE_END
-  validate :validate_and_assign_phone_number
+  UPPER_BOUND = 9999999999
+  LOWER_BOUND = 1111111111
 
 
-  def self.get_all_numbers
-    self.pluck(:phone)
+  validates_format_of :number, :with =>  /\d[0-9]\)*\z/ , :message => "Only positive number are allowed", allow_blank: true
+  validates_uniqueness_of :number
+  validate :valid_number
+
+  scope :system_genrated_records, -> { order(:number).where(system_genrated: true) }
+
+  before_validation :acquire_next_available_number
+  after_save :convert_special_to_system_genrated_number!
+
+  def acquire_next_available_number
+    self.number = LOWER_BOUND if number == 0
+    if acquire_requested_number? || lower_bound_number?
+      self.number = next_system_genrated
+      self.system_genrated = true
+    else
+      self.special_number = true
+    end
+    self.system_genrated = true if lower_bound_number?
   end
 
-  def get_next_available_number
-    return PHONE_RANGE_START if Phone.count == 0 || Phone.where(phone: PHONE_RANGE_START).blank?
+  def acquire_requested_number?
+    Phone.where(number: number).any?
+  end
 
-    number = Phone.order('phone ASC').first.phone + 1
-    while number < PHONE_RANGE_END
-      if Phone.where(phone: number).present?
-        number = number + 1
-      else
-        break
-      end
-    end
-    return number
-  end 
+  def number=(val)
+    super(val.to_s.gsub('-', '').gsub(' ', '').to_i)
+  end
 
-  private
+  def next_system_genrated
+    Phone.system_genrated_records.last&.number&.next || LOWER_BOUND
+  end
 
-  def validate_and_assign_phone_number
+  def special_number? number
+    Phone.find_by(number: number)&.special_number
+  end
 
-    return true if Phone.where(phone: self.phone).blank?
+  def lower_bound_number?
+    LOWER_BOUND == number
+  end
 
-    if self.phone.to_i > PHONE_RANGE_END || self.phone.to_i < PHONE_RANGE_START || Phone.get_all_numbers.include?(phone)
-      self.phone = self.get_next_available_number
-    end
+  def upper_bound_number?
+    UPPER_BOUND == number
+  end
 
-    if self.phone.to_i > PHONE_RANGE_END || self.phone.to_i < PHONE_RANGE_START
-      errors.add(:phone, 'No new number availabe')
+  def convert_special_to_system_genrated_number!
+    if system_genrated && special_number?(number.next)
+      special_num = Phone.find_by_sql("select min(l.number) as start from phones as l left outer join phones as r on l.number + 1 = r.number where r.number is null AND l.special_number is true AND l.number >= #{number.next}")
+      Phone.where(number: number.next..special_num.first.start).update_all(system_genrated: true)
     end
   end
 
-  
-
+  def valid_number
+    return true if (LOWER_BOUND..UPPER_BOUND).include?(self.number)
+    errors.add(:number, "Please enter a valid number(#{LOWER_BOUND} - #{UPPER_BOUND}")
+  end
 end

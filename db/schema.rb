@@ -16,10 +16,12 @@ ActiveRecord::Schema.define(version: 20200703150815) do
   enable_extension "plpgsql"
 
   create_table "phones", force: :cascade do |t|
-    t.bigint "phone"
+    t.bigint "number"
+    t.boolean "system_genrated", default: false
+    t.boolean "special_number", default: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["phone"], name: "index_phones_on_phone"
+    t.index ["number"], name: "index_phones_on_number", unique: true
   end
 
 end
